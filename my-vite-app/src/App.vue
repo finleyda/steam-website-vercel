@@ -28,6 +28,10 @@ function apiUrl(path: string) {
   return `${apiBaseUrl}${normalizedPath}`
 }
 
+async function fetchApi(path: string) {
+  return fetch(apiUrl(path), { credentials: 'include' })
+}
+
 const signInUrl = computed(() => {
   const returnTo = typeof window === 'undefined' ? 'https://steam-website-vercel.vercel.app/' : window.location.href
   return `${apiBaseUrl}/auth/steam?returnTo=${encodeURIComponent(returnTo)}`
@@ -223,33 +227,55 @@ async function loadCurrentUser() {
   errorMessage.value = ''
 
   try {
-    const [userResponse, statsResponse, gamesResponse, friendsResponse] = await Promise.all([
-      fetch(apiUrl('/api/me'), { credentials: 'include' }),
-      fetch(apiUrl('/api/me/stats'), { credentials: 'include' }),
-      fetch(apiUrl('/api/me/games'), { credentials: 'include' }),
-      fetch(apiUrl('/api/me/friends'), { credentials: 'include' }),
-    ])
+    const userResponse = await fetchApi('/api/me')
 
-    if (userResponse.status === 401 || statsResponse.status === 401 || gamesResponse.status === 401 || friendsResponse.status === 401) {
+    if (userResponse.status === 401) {
       clearSignedInState('You are not signed in with Steam.')
       return
     }
 
-    if (!userResponse.ok || !statsResponse.ok || !gamesResponse.ok || !friendsResponse.ok) {
-      throw new Error('Unable to load your Steam profile data')
+    if (!userResponse.ok) {
+      throw new Error('Unable to load your Steam profile')
     }
 
     const userData = await userResponse.json()
-    const statsData = await statsResponse.json()
-    const gamesData = await gamesResponse.json()
-    const friendsData = await friendsResponse.json()
-
     currentUser.value = normalizeCurrentUser(userData)
-    currentStats.value = normalizeStats(statsData)
-    games.value = (gamesData.games || []).map(normalizeGame)
-    friends.value = (friendsData.friends || []).map(normalizeFriend)
-    errorMessage.value = ''
     isSignedIn.value = true
+
+    const [statsResult, gamesResult, friendsResult] = await Promise.allSettled([
+      fetchApi('/api/me/stats'),
+      fetchApi('/api/me/games'),
+      fetchApi('/api/me/friends'),
+    ])
+
+    const failedSections: string[] = []
+
+    if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
+      currentStats.value = normalizeStats(await statsResult.value.json())
+    } else {
+      currentStats.value = null
+      failedSections.push('stats')
+    }
+
+    if (gamesResult.status === 'fulfilled' && gamesResult.value.ok) {
+      const gamesData = await gamesResult.value.json()
+      games.value = (gamesData.games || []).map(normalizeGame)
+    } else {
+      games.value = []
+      failedSections.push('games')
+    }
+
+    if (friendsResult.status === 'fulfilled' && friendsResult.value.ok) {
+      const friendsData = await friendsResult.value.json()
+      friends.value = (friendsData.friends || []).map(normalizeFriend)
+    } else {
+      friends.value = []
+      failedSections.push('friends')
+    }
+
+    errorMessage.value = failedSections.length
+      ? `Signed in, but unable to load ${failedSections.join(', ')}. Steam privacy settings or API limits may restrict this data.`
+      : ''
   } catch (error) {
     clearSignedInState(error instanceof Error ? error.message : 'Unknown error')
   } finally {
