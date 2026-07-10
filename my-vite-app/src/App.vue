@@ -351,7 +351,7 @@ onMounted(() => {
       <a v-if="isSignedIn" class="ghost-btn" href="#" @click.prevent="clearSignedInState()">
         Sign out
       </a>
-      <a v-else class="ghost-btn" :href="https://steam.tomthurston.dev/auth/steam?returnto=https://steam-website-vercel.vercel.app/" target="_blank" rel="noopener noreferrer">
+      <a v-else class="ghost-btn" href="https://steam.tomthurston.dev/auth/steam?returnto=https://steam-website-vercel.vercel.app/" target="_blank" rel="noopener noreferrer">
         Sign in
       </a>
     </header>
