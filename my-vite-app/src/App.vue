@@ -22,14 +22,46 @@ const errorMessage = ref('')
 const gameSortKey = ref<'name' | 'totalPlaytime' | 'recentPlaytime'>('totalPlaytime')
 const gameSortDirection = ref<'asc' | 'desc'>('desc')
 const apiBaseUrl = 'https://steam.tomthurston.dev'
+const sessionStorageKey = 'steamSession'
 
 function apiUrl(path: string) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `${apiBaseUrl}${normalizedPath}`
 }
 
+function getStoredSteamSession() {
+  if (typeof window === 'undefined') return ''
+  return window.sessionStorage.getItem(sessionStorageKey) || ''
+}
+
+function clearStoredSteamSession() {
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.removeItem(sessionStorageKey)
+  }
+}
+
+function captureSteamSessionFromUrl() {
+  if (typeof window === 'undefined') return
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const steamSession = hashParams.get('steamSession')
+  if (!steamSession) return
+
+  window.sessionStorage.setItem(sessionStorageKey, steamSession)
+  hashParams.delete('steamSession')
+
+  const newHash = hashParams.toString()
+  const cleanUrl = `${window.location.pathname}${window.location.search}${newHash ? `#${newHash}` : ''}`
+  window.history.replaceState(null, '', cleanUrl)
+}
+
 async function fetchApi(path: string) {
-  return fetch(apiUrl(path), { credentials: 'include' })
+  const steamSession = getStoredSteamSession()
+
+  return fetch(apiUrl(path), {
+    credentials: 'include',
+    headers: steamSession ? { Authorization: `Bearer ${steamSession}` } : undefined,
+  })
 }
 
 const signInUrl = computed(() => {
@@ -172,6 +204,7 @@ function normalizeRecommendation(recommendation: ApiRecommendation): PlayerToget
 }
 
 function clearSignedInState(message = '') {
+  clearStoredSteamSession()
   currentUser.value = null
   currentStats.value = null
   games.value = []
@@ -294,8 +327,8 @@ async function openGameDetails(game: SteamGame) {
 
   try {
     const [detailsResponse, playerCountResponse] = await Promise.all([
-      fetch(apiUrl(`/api/app/${game.appid}`), { credentials: 'include' }),
-      fetch(apiUrl(`/api/app/${game.appid}/player-count`), { credentials: 'include' }),
+      fetchApi(`/api/app/${game.appid}`),
+      fetchApi(`/api/app/${game.appid}/player-count`),
     ])
 
     if (!detailsResponse.ok || !playerCountResponse.ok) {
@@ -349,8 +382,8 @@ async function selectFriend(friendSteamId: string) {
 
   try {
     const [comparisonResponse, recommendationsResponse] = await Promise.all([
-      fetch(apiUrl(`/api/compare/${friendSteamId}`), { credentials: 'include' }),
-      fetch(apiUrl(`/api/recommendations/play-together?friendSteamId=${encodeURIComponent(friendSteamId)}`), { credentials: 'include' }),
+      fetchApi(`/api/compare/${friendSteamId}`),
+      fetchApi(`/api/recommendations/play-together?friendSteamId=${encodeURIComponent(friendSteamId)}`),
     ])
 
     if (!comparisonResponse.ok || !recommendationsResponse.ok) {
@@ -374,6 +407,7 @@ async function selectFriend(friendSteamId: string) {
 }
 
 onMounted(() => {
+  captureSteamSessionFromUrl()
   void loadCurrentUser()
 })
 </script>
