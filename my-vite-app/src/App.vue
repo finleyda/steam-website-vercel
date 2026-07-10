@@ -21,6 +21,17 @@ const loadingPlayerCount = ref(false)
 const errorMessage = ref('')
 const gameSortKey = ref<'name' | 'totalPlaytime' | 'recentPlaytime'>('totalPlaytime')
 const gameSortDirection = ref<'asc' | 'desc'>('desc')
+const apiBaseUrl = 'https://steam.tomthurston.dev'
+
+function apiUrl(path: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${apiBaseUrl}${normalizedPath}`
+}
+
+const signInUrl = computed(() => {
+  const returnTo = typeof window === 'undefined' ? 'https://steam-website-vercel.vercel.app/' : window.location.href
+  return `${apiBaseUrl}/auth/steam?returnTo=${encodeURIComponent(returnTo)}`
+})
 
 type ApiSteamGame = {
   appid: number
@@ -213,10 +224,10 @@ async function loadCurrentUser() {
 
   try {
     const [userResponse, statsResponse, gamesResponse, friendsResponse] = await Promise.all([
-      fetch('/api/me', { credentials: 'include' }),
-      fetch('/api/me/stats', { credentials: 'include' }),
-      fetch('/api/me/games', { credentials: 'include' }),
-      fetch('/api/me/friends', { credentials: 'include' }),
+      fetch(apiUrl('/api/me'), { credentials: 'include' }),
+      fetch(apiUrl('/api/me/stats'), { credentials: 'include' }),
+      fetch(apiUrl('/api/me/games'), { credentials: 'include' }),
+      fetch(apiUrl('/api/me/friends'), { credentials: 'include' }),
     ])
 
     if (userResponse.status === 401 || statsResponse.status === 401 || gamesResponse.status === 401 || friendsResponse.status === 401) {
@@ -257,8 +268,8 @@ async function openGameDetails(game: SteamGame) {
 
   try {
     const [detailsResponse, playerCountResponse] = await Promise.all([
-      fetch(`/api/app/${game.appid}`, { credentials: 'include' }),
-      fetch(`/api/app/${game.appid}/player-count`, { credentials: 'include' }),
+      fetch(apiUrl(`/api/app/${game.appid}`), { credentials: 'include' }),
+      fetch(apiUrl(`/api/app/${game.appid}/player-count`), { credentials: 'include' }),
     ])
 
     if (!detailsResponse.ok || !playerCountResponse.ok) {
@@ -312,8 +323,8 @@ async function selectFriend(friendSteamId: string) {
 
   try {
     const [comparisonResponse, recommendationsResponse] = await Promise.all([
-      fetch(`/api/compare/${friendSteamId}`, { credentials: 'include' }),
-      fetch(`/api/recommendations/play-together?friendSteamId=${encodeURIComponent(friendSteamId)}`, { credentials: 'include' }),
+      fetch(apiUrl(`/api/compare/${friendSteamId}`), { credentials: 'include' }),
+      fetch(apiUrl(`/api/recommendations/play-together?friendSteamId=${encodeURIComponent(friendSteamId)}`), { credentials: 'include' }),
     ])
 
     if (!comparisonResponse.ok || !recommendationsResponse.ok) {
@@ -351,7 +362,7 @@ onMounted(() => {
       <a v-if="isSignedIn" class="ghost-btn" href="#" @click.prevent="clearSignedInState()">
         Sign out
       </a>
-      <a v-else class="ghost-btn" href="https://steam.tomthurston.dev/auth/steam?returnto=https://steam-website-vercel.vercel.app/" target="_blank" rel="noopener noreferrer">
+      <a v-else class="ghost-btn" :href="signInUrl">
         Sign in
       </a>
     </header>
@@ -1235,4 +1246,3 @@ ul {
   }
 }
 </style>
-
